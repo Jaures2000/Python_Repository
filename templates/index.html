@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carte des patrimoines</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+
+  <body>
+    {% if session.get("id_user") %}
+      <a class="logout-btn" href="/logout" title="Se déconnecter" aria-label="Se déconnecter">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M18.4 5.6a8 8 0 1 1-12.8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </a>
+    {% endif %}
+
+    <header class="navbar">
+      <div class="nav-inner">
+        <a class="brand" href="/">
+          <div class="brand-badge" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M9 3v15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M15 6v15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+
+          <div class="brand-title">
+            <strong>Our Map</strong>
+            <span>Visualisez les patrimoines enregistrés</span>
+          </div>
+        </a>
+
+        <div class="nav-actions">
+          <a href="/ajouter" style="text-decoration:none">
+            <button class="btn inline">+ Enregistrer un patrimoine</button>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card full-width">
+        <h2>Tous les patrimoines enregistrés</h2>
+        <p>Consultez la carte interactive (zoom, déplacement, détails).</p>
+
+        <div class="map-wrapper">
+          <iframe src="/maps/carte.html" loading="lazy"></iframe>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

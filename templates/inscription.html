@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inscription</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+</head>
+
+<body>
+  <div class="auth-container">
+    <div class="auth-head">
+      <div class="auth-badge" aria-hidden="true">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 10V8a5 5 0 0 1 10 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 14v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <div class="auth-title">
+        <h2>Inscription</h2>
+        <p>Créez votre compte pour enregistrer des patrimoines.</p>
+      </div>
+    </div>
+
+    <form method="post" autocomplete="on">
+      <div class="form-group">
+        <label>Nom d'utilisateur</label>
+        <input type="text" name="nom_utilisateur" placeholder="Ex: brownvil" required>
+      </div>
+
+      <div class="form-group">
+        <label>Mot de passe</label>
+        <input type="password" name="mot_de_passe" placeholder="••••••••" required>
+      </div>
+
+      <button class="btn" type="submit">S'inscrire</button>
+    </form>
+
+    <div class="auth-footer">
+      Déjà inscrit ? <a href="/login">Se connecter</a>
+    </div>
+  </div>
+</body>
+</html>

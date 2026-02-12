@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connexion</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+</head>
+
+<body>
+  <div class="auth-container">
+    <div class="auth-head">
+      <div class="auth-badge" aria-hidden="true">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+          <path d="M8.5 12.5l2.5 2.5 4.5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <div class="auth-title">
+        <h2>Connexion</h2>
+        <p>Accédez à votre espace et enregistrez des patrimoines.</p>
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}" id="flash-message">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" autocomplete="on">
+      <div class="form-group">
+        <label>Nom d'utilisateur</label>
+        <input type="text" name="nom_utilisateur" placeholder="Votre nom" required>
+      </div>
+
+      <div class="form-group">
+        <label>Mot de passe</label>
+        <input type="password" name="mot_de_passe" placeholder="••••••••" required>
+      </div>
+
+      <button class="btn" type="submit">Se connecter</button>
+    </form>
+
+    <div class="auth-footer">
+      Pas de compte ? <a href="/inscription">S'inscrire</a>
+    </div>
+  </div>
+
+  <script>
+    setTimeout(() => {
+      const msg = document.getElementById("flash-message");
+      if (msg) {
+        msg.style.opacity = "0";
+        msg.style.transition = "opacity 0.5s ease";
+        setTimeout(() => msg.remove(), 600);
+      }
+    }, 3000);
+  </script>
+</body>
+</html>

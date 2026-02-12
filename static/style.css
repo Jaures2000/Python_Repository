@@ -1,0 +1,99 @@
+.container {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.formulaire {
+  width: 40%;
+}
+
+.map {
+  width: 60%;
+}
+
+
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #f4f6f8;
+    margin: 0;
+    padding: 0;
+}
+
+h2, h3 {
+    text-align: center;
+    color: #2c3e50;
+}
+
+.container {
+    width: 90%;
+    max-width: 900px;
+    margin: 20px auto;
+    background: white;
+    padding: 20px;
+    border-radius: 6px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+form label {
+    font-weight: bold;
+    color: #34495e;
+}
+
+form input {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+button {
+    background-color: #2980b9;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1f6391;
+}
+
+iframe {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+} 
+
+.map-container {
+  display: flex;
+  justify-content: center;
+  margin: 40px 0;              /* espace autour */
+}
+
+#map {
+  border: 3px solid #ddd;      /* contour */
+  border-radius: 12px;         /* coins arrondis */
+  padding: 10px;               /* espace intérieur */
+  background: #fff;            /* fond propre */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); /* effet waouh */
+}
+
+#map {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+#map:hover {
+  transform: scale(1.01);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.25);
+}
+
+.btn-center {
+  display: flex;
+  justify-content: center;
+  margin: 30px 0;
+}
+
