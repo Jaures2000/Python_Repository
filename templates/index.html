@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
 
-  <body>
+  <body class="page-index">
     {% if session.get("id_user") %}
       <a class="logout-btn" href="/logout" title="Se déconnecter" aria-label="Se déconnecter">
         <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

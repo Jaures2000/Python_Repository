@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Itinéraire - {{ dest_nom }}</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='route.css') }}"/>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Leaflet Routing Machine -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+</head>
+
+<body class="page-itineraire">
+  <header class="navbar">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <div class="brand-title">
+          <strong>Itinéraire</strong>
+          <span>Destination : {{ dest_nom }}</span>
+        </div>
+      </a>
+
+      <div class="nav-actions">
+        <a href="/" style="text-decoration:none">
+          <button class="btn inline secondary">← Retour</button>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card full-width">
+      <h2>Chemin vers : {{ dest_nom }}</h2>
+
+      <div class="toolbar">
+        <button id="btn-start-me" class="btn inline">📍 Utiliser ma position</button>
+        <button id="btn-demarrer" class="btn inline" disabled>▶ Démarrer</button>
+        <span class="hint">ou clique sur la carte pour choisir un point de départ.</span>
+      </div>
+
+      <div id="route-summary" class="route-summary">
+        <div class="route-badge">🧭</div>
+        <div>
+          <div class="route-title">Aucun itinéraire pour l’instant</div>
+          <div class="route-meta">Choisis un point de départ (clic carte) ou ta position.</div>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      <!-- Pop-up navigation -->
+      <div id="nav-popup" class="nav-popup hidden" role="dialog" aria-live="polite">
+        <div class="nav-head">
+          <div class="nav-title">
+            <span class="pill green">🟢 Meilleur</span>
+            <span class="pill orange">🟠 Alternatives</span>
+          </div>
+          <button id="nav-close" class="nav-close" title="Fermer">✕</button>
+        </div>
+
+        <div class="nav-body">
+          <div class="nav-step">
+            <div class="step-top">
+              <div class="step-icon" id="step-icon">➡️</div>
+              <div class="step-text">
+                <div id="step-main" class="step-main">Choisis un départ…</div>
+                <div id="step-sub" class="step-sub">—</div>
+              </div>
+            </div>
+
+            <div class="step-progress">
+              <span id="step-count">0/0</span>
+              <span class="dot">•</span>
+              <span id="step-dist">—</span>
+            </div>
+          </div>
+
+          <div class="nav-actions">
+            <button id="prev-step" class="btn inline secondary">←</button>
+            <button id="next-step" class="btn inline">Suivant →</button>
+          </div>
+
+          <div class="nav-list" id="nav-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const destLat = Number("{{ dest_lat }}");
+    const destLon = Number("{{ dest_lon }}");
+    const dest = L.latLng(destLat, destLon);
+
+    const map = L.map("map").setView([destLat, destLon], 14);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap",
+    }).addTo(map);
+
+    L.marker([destLat, destLon]).addTo(map).bindPopup("📍 Destination : {{ dest_nom }}");
+
+    const summaryEl = document.getElementById("route-summary");
+    const btnDemarrer = document.getElementById("btn-demarrer");
+
+    const popupEl = document.getElementById("nav-popup");
+    const closeBtn = document.getElementById("nav-close");
+    const prevBtn = document.getElementById("prev-step");
+    const nextBtn = document.getElementById("next-step");
+    const listEl  = document.getElementById("nav-list");
+
+    const stepIcon = document.getElementById("step-icon");
+    const stepMain = document.getElementById("step-main");
+    const stepSub  = document.getElementById("step-sub");
+    const stepCount= document.getElementById("step-count");
+    const stepDist = document.getElementById("step-dist");
+
+    // Navigation live
+    let watchId = null;
+    let navigating = false;
+    let lastReroute = 0;
+
+    // Position live
+    let userMarker = null;
+    let accuracyCircle = null;
+
+    // Routing
+    let routingControl = null;
+    let bestRoute = null;
+
+    // Steps
+    let steps = [];
+    let current = 0;
+
+    // Départ courant
+    let currentStart = null;
+
+    function formatKm(meters) {
+      const km = meters / 1000;
+      return km < 1 ? `${Math.round(meters)} m` : `${km.toFixed(2)} km`;
+    }
+    function formatTime(seconds) {
+      const mins = Math.round(seconds / 60);
+      if (mins < 60) return `${mins} min`;
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h} h ${m} min`;
+    }
+
+    function setSummary(ok, text1, text2) {
+      summaryEl.classList.toggle("ok", !!ok);
+      summaryEl.querySelector(".route-title").textContent = text1;
+      summaryEl.querySelector(".route-meta").textContent = text2;
+    }
+
+    // ---------- TRADUCTION FR (robuste) ----------
+    function ordFR(n) {
+      const num = Number(n);
+      if (!Number.isFinite(num)) return `${n}e`;
+      return (num === 1) ? "1ʳᵉ" : `${num}ᵉ`;
+    }
+
+    function translateCompass(s) {
+      if (!s) return s;
+      return s
+        .replace(/\bnorthwest\b/gi, "nord-ouest")
+        .replace(/\bnortheast\b/gi, "nord-est")
+        .replace(/\bsouthwest\b/gi, "sud-ouest")
+        .replace(/\bsoutheast\b/gi, "sud-est")
+        .replace(/\bnorth\b/gi, "nord")
+        .replace(/\bsouth\b/gi, "sud")
+        .replace(/\beast\b/gi, "est")
+        .replace(/\bwest\b/gi, "ouest");
+    }
+
+    function toFrench(text) {
+      if (!text) return "";
+      let s = String(text);
+
+      // Rond-point / traffic circle
+      s = s.replace(/Enter the traffic circle and/gi, "Dans le rond-point, ");
+      s = s.replace(/Enter the traffic circle/gi, "Entrez dans le rond-point");
+      s = s.replace(/Exit the traffic circle/gi, "Sortez du rond-point");
+      s = s.replace(/traffic circle/gi, "rond-point");
+
+      // Exits
+      s = s.replace(/Take the (\d+)(?:st|nd|rd|th) exit/gi, (_, n) => `Prenez la ${ordFR(n)} sortie`);
+      s = s.replace(/take the (\d+)(?:st|nd|rd|th) exit/gi, (_, n) => `prenez la ${ordFR(n)} sortie`);
+
+      // Turns / common verbs
+      s = s.replace(/\bHead\b/gi, "Dirigez-vous");
+      s = s.replace(/\bContinue\b/gi, "Continuez");
+      s = s.replace(/\bKeep left\b/gi, "Restez à gauche");
+      s = s.replace(/\bKeep right\b/gi, "Restez à droite");
+      s = s.replace(/\bTurn left\b/gi, "Tournez à gauche");
+      s = s.replace(/\bTurn right\b/gi, "Tournez à droite");
+      s = s.replace(/\bSlight left\b/gi, "Tournez légèrement à gauche");
+      s = s.replace(/\bSlight right\b/gi, "Tournez légèrement à droite");
+      s = s.replace(/\bSharp left\b/gi, "Tournez fortement à gauche");
+      s = s.replace(/\bSharp right\b/gi, "Tournez fortement à droite");
+      s = s.replace(/\bU-turn\b/gi, "Demi-tour");
+      s = s.replace(/\bYou have arrived\b/gi, "Vous êtes arrivé");
+
+      // Direction cardinales
+      s = translateCompass(s);
+
+      // Nettoyage mélange FR/EN ("Dirigez-vous north" etc.)
+      s = s.replace(/\s+/g, " ").trim();
+
+      return s;
+    }
+
+    // Essaie de fabriquer un texte FR à partir des champs instruction (quand présents),
+    // sinon fallback sur toFrench(text).
+    function frenchInstruction(i) {
+      const raw = (i?.text || i?.instruction || "").trim();
+      const type = String(i?.type || "").toLowerCase();
+      const mod  = String(i?.modifier || "").toLowerCase();
+
+      const exit =
+        i?.exit ?? i?.roundaboutExit ?? i?.roundabout_exit ?? i?.roundaboutexit ?? null;
+
+      // Rond-point
+      if (type.includes("roundabout") || /traffic circle/i.test(raw)) {
+        if (exit) return `Dans le rond-point, prenez la ${ordFR(exit)} sortie`;
+        if (/exit the traffic circle/i.test(raw)) return "Sortez du rond-point";
+        if (/enter the traffic circle/i.test(raw)) return "Entrez dans le rond-point";
+        return "Rond-point";
+      }
+
+      // Arrivée
+      if (type.includes("destination") || type.includes("arrive") || /you have arrived/i.test(raw)) {
+        return "Vous êtes arrivé à destination";
+      }
+
+      // Indications basées sur modifier/type (si dispo)
+      if (type.includes("left") || mod.includes("left")) return "Tournez à gauche";
+      if (type.includes("right") || mod.includes("right")) return "Tournez à droite";
+      if (type.includes("slight") && (type.includes("left") || mod.includes("left"))) return "Tournez légèrement à gauche";
+      if (type.includes("slight") && (type.includes("right") || mod.includes("right"))) return "Tournez légèrement à droite";
+      if (type.includes("sharp") && (type.includes("left") || mod.includes("left"))) return "Tournez fortement à gauche";
+      if (type.includes("sharp") && (type.includes("right") || mod.includes("right"))) return "Tournez fortement à droite";
+      if (type.includes("uturn") || raw.toLowerCase().includes("u-turn")) return "Faites demi-tour";
+      if (type.includes("straight") || mod.includes("straight")) return "Continuez tout droit";
+
+      // Start / Head
+      if (type.includes("start") || type.includes("head") || /head\b/i.test(raw)) {
+        return toFrench(raw);
+      }
+
+      // fallback
+      return toFrench(raw);
+    }
+
+    function guessIcon(text) {
+      const t = (text || "").toLowerCase();
+      if (t.includes("gauche")) return "⬅️";
+      if (t.includes("droite")) return "➡️";
+      if (t.includes("rond-point")) return "⭮";
+      if (t.includes("demi-tour")) return "↩️";
+      if (t.includes("tout droit") || t.includes("continuez")) return "⬆️";
+      return "➡️";
+    }
+
+    function openPopup() { popupEl.classList.remove("hidden"); }
+    function closePopup() { popupEl.classList.add("hidden"); }
+
+    function haversineMeters(a, b) {
+      const R = 6371000;
+      const toRad = (x) => x * Math.PI / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+
+      const s = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+      return 2 * R * Math.asin(Math.sqrt(s));
+    }
+
+    function buildStepsFromRoute(route) {
+      const oldText = steps?.[current]?.text || null;
+
+      const instr = route?.instructions || [];
+      const coords = route?.coordinates || [];
+
+      steps = instr
+        .map((i) => {
+          const text = frenchInstruction(i);
+          const dist = (typeof i.distance === "number") ? formatKm(i.distance) : "";
+
+          const idx =
+            (typeof i.index === "number") ? i.index :
+            (typeof i.routeIndex === "number") ? i.routeIndex :
+            null;
+
+          const road = (i.road || i.name || "").trim();
+          const sub = road ? `Sur : ${road}` : "";
+
+          return { text, dist, sub, coordIndex: idx, coordsLen: coords.length };
+        })
+        .filter(s => s.text);
+
+      // En navigation, essaie de garder la progression
+      if (navigating && oldText) {
+        const keep = steps.findIndex(s => s.text === oldText);
+        current = (keep >= 0) ? keep : 0;
+      } else {
+        current = 0;
+      }
+
+      btnDemarrer.disabled = steps.length === 0;
+
+      renderList();
+      renderStep(current);
+    }
+
+    function renderList() {
+      listEl.innerHTML = "";
+      steps.forEach((s, idx) => {
+        const div = document.createElement("div");
+        div.className = "nav-item";
+        div.innerHTML = `
+          <div class="nav-item-icon">${guessIcon(s.text)}</div>
+          <div class="nav-item-text">
+            <div class="nav-item-main">${s.text}</div>
+            <div class="nav-item-sub">${s.dist || ""}</div>
+          </div>
+        `;
+        div.addEventListener("click", () => renderStep(idx));
+        listEl.appendChild(div);
+      });
+    }
+
+    function renderStep(i) {
+      if (!steps.length) return;
+
+      current = Math.max(0, Math.min(i, steps.length - 1));
+      const s = steps[current];
+
+      stepIcon.textContent = guessIcon(s.text);
+      stepMain.textContent = s.text;
+      stepSub.textContent  = navigating
+        ? (s.sub ? `${s.sub} • Navigation en cours` : "Navigation en cours")
+        : (s.sub ? `${s.sub} • Appuie sur ▶ Démarrer` : "Appuie sur ▶ Démarrer");
+      stepCount.textContent= `${current + 1}/${steps.length}`;
+      stepDist.textContent = s.dist || "";
+
+      [...listEl.querySelectorAll(".nav-item")].forEach((el, idx) => {
+        el.classList.toggle("active", idx === current);
+      });
+    }
+
+    function tryAdvanceStep(userLatLng) {
+      if (!bestRoute || !steps.length) return;
+
+      const coords = bestRoute.coordinates || [];
+      const s = steps[current];
+      const idx = (typeof s.coordIndex === "number") ? s.coordIndex : null;
+
+      if (idx === null || !coords[idx]) return;
+
+      const target = coords[idx];
+      const d = haversineMeters(userLatLng, target);
+
+      if (d < 25 && current < steps.length - 1) {
+        renderStep(current + 1);
+      }
+    }
+
+    function createUserManIcon() {
+      const svg = `
+        <svg width="34" height="34" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000" flood-opacity=".35"/>
+            </filter>
+          </defs>
+
+          <g filter="url(#shadow)">
+            <circle cx="32" cy="32" r="18" fill="rgba(60,150,255,.22)"/>
+            <circle cx="32" cy="20" r="9" fill="#f2c9a0"/>
+            <rect x="28" y="28" width="8" height="6" rx="3" fill="#e9b98b"/>
+            <path d="M18 54c1-10 7-18 14-20h0c7 2 13 10 14 20" fill="#1f3a5f"/>
+            <path d="M26 34l6 6 6-6" fill="#0f243d"/>
+            <path d="M28 34h8l-4 10z" fill="#ffffff"/>
+            <circle cx="32" cy="46" r="1.6" fill="#d9d9d9"/>
+          </g>
+
+          <circle cx="32" cy="32" r="4.5" fill="rgba(60,150,255,1)" stroke="rgba(255,255,255,.95)" stroke-width="2"/>
+        </svg>
+      `;
+
+      return L.divIcon({
+        className: "user-marker",
+        html: svg,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+    }
+
+    const userIcon = createUserManIcon();
+
+    function updateUserMarker(latlng, accuracyM) {
+      if (!userMarker) {
+        userMarker = L.marker(latlng, { icon: userIcon, interactive: false }).addTo(map);
+      } else {
+        userMarker.setLatLng(latlng); // fluide via CSS (.user-marker transition)
+      }
+
+      if (!accuracyCircle) {
+        accuracyCircle = L.circle(latlng, {
+          radius: Math.max(accuracyM || 10, 10),
+          className: "user-accuracy",
+          interactive: false
+        }).addTo(map);
+      } else {
+        accuracyCircle.setLatLng(latlng);
+        accuracyCircle.setRadius(Math.max(accuracyM || 10, 10));
+      }
+    }
+
+    function buildRoutingControl(startLatLng) {
+      routingControl = L.Routing.control({
+        waypoints: [startLatLng, dest],
+
+        formatter: new L.Routing.Formatter({ language: "fr", units: "metric" }),
+
+        router: L.Routing.osrmv1({
+          serviceUrl: "https://router.project-osrm.org/route/v1",
+          profile: "car",
+          alternatives: true,
+          steps: true
+        }),
+
+        showAlternatives: true,
+        addWaypoints: false,
+        draggableWaypoints: false,
+        routeWhileDragging: false,
+        fitSelectedRoutes: true,
+        show: false,
+
+        lineOptions: {
+          styles: [{ color: "#2ee59d", opacity: 0.95, weight: 7 }]
+        },
+        altLineOptions: {
+          styles: [{ color: "#ff9f1a", opacity: 0.90, weight: 7, dashArray: "6,10" }]
+        },
+
+        createMarker: function(i, wp, n) {
+          if (i === 0) return L.marker(wp.latLng).bindPopup("🚩 Départ");
+          if (i === n - 1) return L.marker(wp.latLng).bindPopup("🏁 Arrivée : {{ dest_nom }}");
+          return null;
+        }
+      }).addTo(map);
+
+      routingControl.on("routesfound", (e) => {
+        bestRoute = e.routes[0];
+
+        setSummary(
+          true,
+          `🟢 Meilleur chemin : ${formatKm(bestRoute.summary.totalDistance)} • ${formatTime(bestRoute.summary.totalTime)}`,
+          e.routes.length > 1
+            ? `✅ ${e.routes.length - 1} alternative(s) en orange disponibles (pointillés).`
+            : "Aucune alternative trouvée ici (le routeur renvoie un seul chemin)."
+        );
+
+        buildStepsFromRoute(bestRoute);
+        openPopup();
+      });
+
+      routingControl.on("routingerror", () => {
+        bestRoute = null;
+        steps = [];
+        btnDemarrer.disabled = true;
+        setSummary(false, "❌ Erreur d’itinéraire", "Réessaie avec un autre point de départ.");
+      });
+    }
+
+    function setRouteStart(startLatLng) {
+      currentStart = startLatLng;
+      if (!routingControl) buildRoutingControl(startLatLng);
+      else routingControl.setWaypoints([startLatLng, dest]);
+    }
+
+    map.on("click", (e) => {
+      setRouteStart(e.latlng);
+      btnDemarrer.disabled = false;
+      openPopup();
+    });
+
+    document.getElementById("btn-start-me").addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        setSummary(false, "❌ Géolocalisation non supportée", "Utilise le clic sur la carte.");
+        return;
+      }
+
+      setSummary(true, "📡 Récupération de ta position...", "Assure-toi d’avoir activé le GPS.");
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const start = L.latLng(pos.coords.latitude, pos.coords.longitude);
+          map.setView(start, 15);
+          updateUserMarker(start, pos.coords.accuracy);
+          setRouteStart(start);
+          btnDemarrer.disabled = false;
+          openPopup();
+        },
+        () => setSummary(false, "❌ Position indisponible", "Permission refusée ou GPS désactivé."),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+
+    function startNavigation() {
+      if (!navigator.geolocation) return;
+
+      navigating = true;
+      btnDemarrer.textContent = "⏸ Arrêter";
+      openPopup();
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+
+          updateUserMarker(latlng, pos.coords.accuracy);
+          map.panTo(latlng, { animate: true });
+
+          tryAdvanceStep(latlng);
+
+          const now = Date.now();
+          if (now - lastReroute > 5000) {
+            lastReroute = now;
+            setRouteStart(latlng);
+          }
+        },
+        () => {
+          setSummary(false, "❌ Navigation interrompue", "Impossible de suivre la position en temps réel.");
+          stopNavigation();
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      );
+
+      setSummary(true, "🧭 Navigation en cours", "Le chemin se met à jour pendant que tu bouges.");
+      renderStep(current);
+    }
+
+    function stopNavigation() {
+      navigating = false;
+      btnDemarrer.textContent = "▶ Démarrer";
+
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+
+      setSummary(true, "⏸ Navigation arrêtée", "Tu peux relancer ▶ Démarrer quand tu veux.");
+      renderStep(current);
+    }
+
+    btnDemarrer.addEventListener("click", () => {
+      if (!currentStart) return;
+      if (!navigating) startNavigation();
+      else stopNavigation();
+    });
+
+    closeBtn.addEventListener("click", closePopup);
+    prevBtn.addEventListener("click", () => renderStep(current - 1));
+    nextBtn.addEventListener("click", () => renderStep(current + 1));
+  </script>
+</body>
+</html>
