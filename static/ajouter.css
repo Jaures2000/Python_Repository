@@ -1,0 +1,29 @@
+/* Petites corrections de mise en page pour la page Ajouter */
+.page-ajouter .row-tight{
+  margin: 10px 0 14px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.page-ajouter .add-form .form-actions{
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-start; /* ✅ bouton à gauche */
+}
+
+.page-ajouter .add-form .btn-save{
+  min-width: 180px;
+}
+
+/* Mobile: bouton pleine largeur */
+@media (max-width: 640px){
+  .page-ajouter .add-form .form-actions{
+    justify-content: stretch;
+  }
+  .page-ajouter .add-form .btn-save{
+    width: 100%;
+    min-width: 0;
+  }
+}

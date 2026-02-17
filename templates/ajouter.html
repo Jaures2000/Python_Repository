@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ajouter un patrimoine</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='ajouter.css') }}" />
+  </head>
+
+  <body class="page-ajouter">
+    {% if session.get("id_user") %}
+      <a class="logout-btn" href="/logout" title="Se déconnecter" aria-label="Se déconnecter">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M18.4 5.6a8 8 0 1 1-12.8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </a>
+    {% endif %}
+
+    <header class="navbar">
+      <div class="nav-inner">
+        <a class="brand" href="/">
+          <div class="brand-badge" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </div>
+
+          <div class="brand-title">
+            <strong>Ajouter un patrimoine</strong>
+            <span>Choisissez un point sur la carte</span>
+          </div>
+        </a>
+
+        <div class="nav-actions">
+          <a href="/" style="text-decoration:none">
+            <button class="btn inline secondary">← Retour à la grande map</button>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>Formulaire</h2>
+        <p>
+          Clique sur la carte pour placer le marqueur, puis <b>glisse-le</b> pour ajuster précisément.
+        </p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="row row-tight">
+          <button id="btn-geoloc" type="button" class="btn inline">
+            📍 Utiliser ma position actuelle
+          </button>
+          <div id="geo-status" class="hint"></div>
+        </div>
+
+        <form method="post" action="/ajouter" class="add-form">
+          <div class="form-group">
+            <label>Nom du patrimoine</label>
+            <input type="text" name="nom" placeholder="Ex: Pharmacie Ajololo" required />
+          </div>
+
+          <div class="form-group">
+            <label>Latitude</label>
+            <input type="text" name="latitude" placeholder="Clique sur la carte" required />
+          </div>
+
+          <div class="form-group">
+            <label>Longitude</label>
+            <input type="text" name="longitude" placeholder="Clique sur la carte" required />
+          </div>
+
+          <!-- ✅ Bouton bien positionné -->
+          <div class="form-actions">
+            <button type="submit" class="btn btn-save">Enregistrer</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h3>Choisir l’emplacement</h3>
+        <div id="map"></div>
+
+        <p class="hint" style="margin-top:10px;">
+          💡 Astuce : zoome puis déplace le marqueur pour être précis.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const map = L.map("map").setView([6.13, 1.22], 13);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap",
+      }).addTo(map);
+
+      let marker = null;
+      const statusEl = document.getElementById("geo-status");
+
+      function setInputs(lat, lon) {
+        document.querySelector('input[name="latitude"]').value = Number(lat).toFixed(6);
+        document.querySelector('input[name="longitude"]').value = Number(lon).toFixed(6);
+      }
+
+      function ensureMarker(lat, lon) {
+        if (!marker) {
+          marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+
+          marker.on("drag", function () {
+            const p = marker.getLatLng();
+            setInputs(p.lat, p.lng);
+          });
+
+          marker.on("dragend", function () {
+            const p = marker.getLatLng();
+            setInputs(p.lat, p.lng);
+          });
+        } else {
+          marker.setLatLng([lat, lon]);
+        }
+
+        setInputs(lat, lon);
+      }
+
+      map.on("click", function (e) {
+        ensureMarker(e.latlng.lat, e.latlng.lng);
+        if (statusEl) statusEl.textContent = "✅ Marqueur placé : maintiens et glisse pour ajuster.";
+      });
+
+      document.getElementById("btn-geoloc").addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          if (statusEl) statusEl.textContent = "❌ Géolocalisation non supportée.";
+          return;
+        }
+
+        if (statusEl) statusEl.textContent = "📡 Récupération de votre position...";
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+
+            ensureMarker(lat, lon);
+            map.setView([lat, lon], 15);
+            if (statusEl) statusEl.textContent = "✅ Position détectée : tu peux glisser le marqueur pour ajuster.";
+          },
+          () => {
+            if (statusEl) statusEl.textContent = "❌ Impossible d’obtenir la position (permission/GPS).";
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    </script>
+  </body>
+</html>
